@@ -1,0 +1,8 @@
+# depslib dependency file v1.0
+1740083642 source:d:\c\projektkvarta\main.c
+	<stdio.h>
+	<stdlib.h>
+	<stdbool.h>
+	<windows.h>
+	<conio.h>
+
