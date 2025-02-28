@@ -31,18 +31,6 @@ int endofmenu(int y,int n){
 void spacing(){
     printf("\n  ");
 }
-/*
-void clearfromto(int ulx,int uly,int brx,int bry){
-    char spaces[MAX_STRING_LENGTH*bry];
-    for(int i=0;i<bry-uly;i++){
-        for(int k=0;k<brx-ulx;k++)
-            spaces[i*(brx-ulx)+k]=' ';
-        spaces[i*(brx-ulx)]='\n';
-    }
-    spaces[brx-ulx]='\0';
-    printf("\e[s\e[%d;%dH%s\e[u",uly,ulx,spaces);
-}
-*/
 
 void header(){
     system("cls");
@@ -105,6 +93,43 @@ void shiftchoices(int choices[],int cc,int y){
         if(choices[i]>choices[y])
             choices[i]--;
     }
+}
+
+int startswith(Op op, char startingpattern[],int ch){
+    switch(ch){
+        case 0:
+            for(int i=0;startingpattern[i]!='\0';i++){
+                if(toupper(op.name[i])!=toupper(startingpattern[i]))
+                    return 1;
+            }
+            break;
+        case 1:
+            for(int i=0;startingpattern[i]!='\0';i++){
+                if(op.speed!=startingpattern[i]-48)
+                    return 1;
+            }
+            break;
+        case 2:
+            for(int i=0;startingpattern[i]!='\0';i++){
+                if(4-op.speed!=startingpattern[i]-48)
+                    return 1;
+            }
+            break;
+        case 3:
+            for(int i=0;startingpattern[i]!='\0';i++){
+                if(toupper(booltopost(op.post)[i])!=toupper(startingpattern[i]))
+                    return 1;
+            }
+            break;
+    }
+    return 0;
+}
+
+void rmwhitespaces(char in[], char out[]){
+    int i=0;
+    for(i;in[i]!='\0',in[i]!=' ';i++)
+        out[i]=in[i];
+    out[i]='\0';
 }
 
 int menu(char text[][MAX_STRING_LENGTH],int cc,bool vertical,int y,int uly){
@@ -228,17 +253,18 @@ void changepasswd(){
     }
 }
 
-void printall(Op ops[], int n){
+void printall(Op ops[], int n,char search[],int ch,int yoffset){
     header();
+    printf("\e[%d;1H",yoffset);
     for(int i=0;i<n;i++){
-        if(ops[i].removed==false)
-        printf("  %-15s %-10d %-10d %-10s\n",ops[i].name,ops[i].speed,4-ops[i].speed,booltopost(ops[i].post));
+        if(ops[i].removed==false&&(startswith(ops[i],search,ch)==0))
+            printf("  %-15s %-10d %-10d %-10s\n",ops[i].name,ops[i].speed,4-ops[i].speed,booltopost(ops[i].post));
     }
     spacing();
 }
 
-void opsort(Op ops[],int n,int chce){       
-    for(int i=0;i<n-2;i++){
+void opsort(Op ops[],int n,int chce){   
+    for(int i=0;i<n-1;i++){
         for(int y=n-1;y>i;y--){
                 if((!comparestrings(ops[y-1].name,ops[y].name)&&chce==0)||(ops[y-1].speed>ops[y].speed&&chce==1)||(ops[y-1].speed<ops[y].speed&&chce==2)||(ops[y-1].post>ops[y].post&&chce==3)){
                     swapop(&ops[y],&ops[y-1]);
@@ -263,11 +289,24 @@ void opsortmenu(Op ops[],int n){
 }
 
 void opsearch(Op ops[],int n){
-    int x;
-    char text[10][MAX_STRING_LENGTH]={{"Name           "},{"Speed     "},{"Health    "},{"Post      "}};
+    int x,input,i=0,brk=0;
+    char text[10][MAX_STRING_LENGTH]={{"Name           "},{"Speed     "},{"Health    "},{"Post      "}},searched[MAX_STRING_LENGTH]={""},sf[MAX_STRING_LENGTH];
     system("cls");
+    printall(ops,n,searched,0,6);
+    x=menu(text,4,false,0,2);
     while(x!=-2){
-        printall(ops,n);
+        while(brk!=1){
+            printall(ops,n,searched,x,6);
+            rmwhitespaces(text[x],sf);
+            printf("\e[4;3H\e[?25hSearching for %s: %s",sf,searched);
+            input=getch();
+            switch(input){
+                case 8:if(i-1>=0)i--;searched[i]='\0';break;
+                case 27:brk=1;printf("\e[?25l");break;
+                default:if(i+1<MAX_STRING_LENGTH)i++;searched[i-1]=input;searched[i]='\0';break;
+            }
+        }
+        brk=0;
         x=menu(text,4,false,0,2);
     }
 }
@@ -431,7 +470,7 @@ int main(){
         choice = mainMenu(admin);
         switch(choice){
             case 1:if(admin==false){if((admin = signin("Insert password:"))==true){spacing();printf("Login successfull");spacing();system("pause");};}else{changepasswd();}break;
-            case 2:printall(ops,n);system("pause");break;
+            case 2:printall(ops,n,"",0,4);system("pause");break;
             case 3:opsearch(ops,n);break;
             case 4:opsortmenu(ops,n);break;
             case 5:if(adde(ops,n)==0)n++;break;
