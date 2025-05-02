@@ -5,7 +5,6 @@
 #include <conio.h>
 #include <string.h>
 
-#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x4
 #define ARROW_UP    256 + 72
 #define ARROW_DOWN  256 + 80
 #define ARROW_LEFT  256 + 75
@@ -21,16 +20,6 @@ typedef struct{ //Op
     bool post;
     bool removed;
 }Op;
-
-int endofmenu(int y,int n){
-    if(y<n)
-        return y;
-    return n-1;
-}
-
-void spacing(){
-    printf("\n  ");
-}
 
 void header(){
     system("cls");
@@ -50,16 +39,15 @@ int getcharrow(){
     return ch;
 }
 
-//Returns index based on position in visible list
+//Converts a visible index to the actual index
 int ytoi(Op ops[],int y){
-    int n=y;
-    for(int i=0;y>=0;i++){
-        if(ops[i].removed==true)
-            n++;
-        else
+    int actualIndex=0;
+    while(y>=0){
+        if(!ops[actualIndex].removed)
             y--;
+        actualIndex++;
     }
-    return n;
+    return actualIndex-1;
 }
 
 int countallvisible(Op ops[], int n){
@@ -72,8 +60,7 @@ int countallvisible(Op ops[], int n){
 }
 
 void swapop(Op * op1,Op * op2){
-    Op p;
-    p=*op1;
+    Op p=*op1;
     *op1=*op2;
     *op2=p;
 }
@@ -86,13 +73,6 @@ bool comparestrings(char s1[],char s2[]){
             return 1;
     }
     return 0;
-}
-
-void shiftchoices(int choices[],int cc,int y){
-    for(int i=0;i<cc;i++){
-        if(choices[i]>choices[y])
-            choices[i]--;
-    }
 }
 
 int startswith(Op op, char startingpattern[],int ch){
@@ -141,13 +121,14 @@ int menu(char text[][MAX_STRING_LENGTH],int cc,bool vertical,int y,int uly){
         for(int i=0;i<cc;i++){
             if((i==y&&vertical==true)||(vertical==false&&i==x)){
                 if(vertical==true)printf("  \e[7m%s\e[m\n",text[i]);
-                else printf("\e[7m%s \e[m",text[i]);
+                else printf("\e[7m%s\e[m",text[i]);
             }
             else{
                 if(vertical==true)printf("  %s\n",text[i]);
-                else printf("%s ",text[i]);
+                else printf("%s",text[i]);
             }
         }
+        printf("\n\n  Use arrows to move up and down, escape to exit and enter to confirm\n\n  ");
         ch = getcharrow();
         switch(ch){
             case ARROW_UP:if(y-1>=0&&vertical==true)y--;break;
@@ -161,17 +142,10 @@ int menu(char text[][MAX_STRING_LENGTH],int cc,bool vertical,int y,int uly){
     }
 }
 
-int mainMenu(bool isadmin){
-    int cofchcs[2]={5,8};
-    char chcs[2][10][MAX_STRING_LENGTH]={ {{"Sign as administrator"},{"Print whole DB"},{"Search in DB"},{"Sort DB"},{"End"}},
-                            {{"Change password"},{"Print whole DB"},{"Search in DB"},{"Sort DB"},{"Add element"},{"Edit element"},{"Remove element"},{"Switch to user"}}};
-    system("cls");
-    return (menu(chcs[isadmin],cofchcs[isadmin],true,0,2)+1)%cofchcs[isadmin];
-}
-
 int sequencemenu(char text[][MAX_STRING_LENGTH],int cc,int chcs[]){
-    int ch,y=0,j=0;
-    sprintf(text[cc-1],"DONE");
+    int ch,y=0,j=0,chc[cc],cha;
+    memset(chc,0,cc*sizeof(int));
+    strcpy(text[cc-1],"DONE");
     while(true){
         printf("\e[H");
         printf("\n");
@@ -192,9 +166,16 @@ int sequencemenu(char text[][MAX_STRING_LENGTH],int cc,int chcs[]){
         switch(ch){
             case ARROW_UP:if(y-1>=0)y--;break;
             case ARROW_DOWN:if(y+1<cc)y++;break;
-            case 13:if(y==cc-1)return j;if(chcs[y]==0){j++;chcs[y]=j;}else{j--;shiftchoices(chcs,cc-1,y);chcs[y]=0;}break;
+            case 13:return j;
             case 27:return -2;
-            default:break;
+            default:
+                cha=ch-48;
+                if((cha<cc||cha>0)&&(chc[cha]==0||cha==0)){
+                    chc[chcs[y]]=0;
+                    chc[cha]=1;
+                    chcs[y]=cha;
+                }
+                break;
         }
     }
 }
@@ -219,7 +200,7 @@ bool signin(char inserpasswd[]){
     char cpasswd[100];
     FILE * in = fopen("passwd.txt","r");
     system("cls");
-    spacing();
+    printf("\n  ");
     if(fscanf(in,"%s",cpasswd)!=1){
         fclose(in);
         printf("Create password\n");
@@ -234,23 +215,28 @@ bool signin(char inserpasswd[]){
         if(strcmp(passwd,cpasswd)==0)
             return true;
         printf("  The password is incorrect\n");
-        spacing();
+        printf("\n  ");
         system("pause");
         return false;
     }
 }
 
 void changepasswd(){
-
     if(signin("Insert old password:")==true){
-        spacing();
-        printf("Type in new password:");
+        printf("\n  Type in new password:");
         createpassword();
-        spacing();
-        printf("Password successfully changed");
-        spacing();
+        printf("\n  Password successfully changed\n  ");
         system("pause");
     }
+}
+
+void printsummary(Op ops[],int n){
+    int atkcount=0;
+    for(int i=0;i<n;i++){
+        if(ops[i].post==1)
+            atkcount++;
+    }
+    printf("Total count of ops in DB: %d with %.1f%% being attacker\n\n",n,100.0*atkcount/max(n,1));
 }
 
 void printall(Op ops[], int n,char search[],int ch,int yoffset){
@@ -260,10 +246,10 @@ void printall(Op ops[], int n,char search[],int ch,int yoffset){
         if(ops[i].removed==false&&(startswith(ops[i],search,ch)==0))
             printf("  %-15s %-10d %-10d %-10s\n",ops[i].name,ops[i].speed,4-ops[i].speed,booltopost(ops[i].post));
     }
-    spacing();
+    printf("\n  ");
 }
 
-void opsort(Op ops[],int n,int chce){   
+void opsort(Op ops[],int n,int chce){
     for(int i=0;i<n-1;i++){
         for(int y=n-1;y>i;y--){
                 if((!comparestrings(ops[y-1].name,ops[y].name)&&chce==0)||(ops[y-1].speed>ops[y].speed&&chce==1)||(ops[y-1].speed<ops[y].speed&&chce==2)||(ops[y-1].post>ops[y].post&&chce==3)){
@@ -275,6 +261,7 @@ void opsort(Op ops[],int n,int chce){
 
 void opsortmenu(Op ops[],int n){
     int cc=4,chcs[++cc],j;
+    memset(chcs,0,cc*sizeof(int));
     char text[10][MAX_STRING_LENGTH]={{"Name"},{"Speed"},{"Health"},{"Post"}};
     system("cls");
     j=sequencemenu(text,cc,chcs);
@@ -290,7 +277,7 @@ void opsortmenu(Op ops[],int n){
 
 void opsearch(Op ops[],int n){
     int x,input,i=0,brk=0;
-    char text[10][MAX_STRING_LENGTH]={{"Name           "},{"Speed     "},{"Health    "},{"Post      "}},searched[MAX_STRING_LENGTH]={""},sf[MAX_STRING_LENGTH];
+    char text[10][MAX_STRING_LENGTH]={{"Name            "},{"Speed      "},{"Health     "},{"Post       "}},searched[MAX_STRING_LENGTH]={""},sf[MAX_STRING_LENGTH];
     system("cls");
     printall(ops,n,searched,0,6);
     x=menu(text,4,false,0,2);
@@ -323,9 +310,9 @@ int OpstoString(Op ops[],int n,char opstring[][MAX_STRING_LENGTH]){
 }
 
 void OptoStrings(Op op,char opstring[][MAX_STRING_LENGTH]){
-    sprintf(opstring[0],"%-15s",op.name);
-    sprintf(opstring[1],"%-10d",op.speed);
-    sprintf(opstring[2],"%-10d",4-op.speed);
+    sprintf(opstring[0],"%-16s",op.name);
+    sprintf(opstring[1],"%-11d",op.speed);
+    sprintf(opstring[2],"%-11d",4-op.speed);
     sprintf(opstring[3],"%-10s",booltopost(op.post));
 }
 
@@ -386,26 +373,31 @@ int editElement(int x,int y,int trueindex, Op ops[],int n,bool highlight){
 
 void edite(Op ops[],int n){
     char opsstring[n][MAX_STRING_LENGTH],opstring[4][MAX_STRING_LENGTH];
-    int x=0,y=0,uly=4;
+    int x=0,y=0,uly=4,r=0,visible=countallvisible(ops,n);
     header();
     OpstoString(ops,n,opsstring);
-    y = menu(opsstring,countallvisible(ops,n),true,y,uly);
+    y = menu(opsstring,visible,true,y,uly);
     while(y!=-2){
         OptoStrings(ops[ytoi(ops,y)],opstring);
         x = menu(opstring,4,false,y,uly);
         if(x>=0&&x<=3){
-            editElement(x,y+uly,ytoi(ops,y),ops,n,true);
+            r=editElement(x,y+uly,ytoi(ops,y),ops,n,true);
             OpstoString(ops,n,opsstring);
         }
-        y = menu(opsstring,countallvisible(ops,n),true,y,uly);
+        if(r!=0)printf("\e[%d;3HInvalid input         ",visible+uly+2);
+        else printf("\e[%d;3HChange successfull",visible+uly+2);
+        y = menu(opsstring,visible,true,y,uly);
     }
 }
 
 int adde(Op ops[],int n){
-    int y=2;
-    header();
+    int y=4;
+    //char text[4][MAX_STRING_LENGTH]={"Name","Speed","Health","Post"};
+    //header();
     printf("\e[?25h");
     for(int x=0;x<4;x++){
+        if(x==2)
+            x++;
         if(editElement(x,y,n,ops,n,false)!=0)
             x--;
     }
@@ -420,65 +412,80 @@ void rme(Op ops[], int n){
     while(y!=-2){
         header();
         c=OpstoString(ops,n,opsstring);
-        //system("cls");
-        y=menu(opsstring,c,true,endofmenu(y,c),4);
+        y=menu(opsstring,c,true,((y<c)?y:c-1),4);
         if(y>=0&&y<c){
-            ops[ytoi(ops,y)].removed=true;
+            printf("Press enter to delete %s",ops[ytoi(ops,y)].name);
+            if(getch()==13)
+                ops[ytoi(ops,y)].removed=true;
         }
     }
 }
 
-int reade(FILE * in, Op ops[],int n){
+int reade(FILE * in, Op ops[],int *n){
     int i=0,tmp;
-    while(i<n&&fscanf(in,"%s %d %d\n",ops[i].name,&ops[i].speed,&tmp)==3){
+    while(i<*n&&fscanf(in,"%s %d %d\n",ops[i].name,&ops[i].speed,&tmp)==3){
         ops[i].post=tmp;
         ops[i].removed=false;
         i++;
     }
     rewind(in);
-    return i;
+    *n=i;
+    return 0;
 }
 
-void commit(char out[], Op ops[], int n){
+int commit(char out[], Op ops[], int n){
     FILE * outf = fopen(out,"w");
     for(int i=0;i<n;i++){
         if(ops[i].removed==false){
             fprintf(outf,"%s %d %d\n",ops[i].name,ops[i].speed,ops[i].post);
         }
     }
+    fclose(outf);
+    return 0;
+}
+
+int mainMenu(Op ops[],int n,bool *isadmin){
+    int cofchcs[2]={5,8};
+    char chcs[2][10][MAX_STRING_LENGTH]={ {{"Sign as administrator"},{"Print whole DB"},{"Search in DB"},{"Sort DB"},{"End"}},
+                            {{"Change password"},{"Print whole DB"},{"Search in DB"},{"Sort DB"},{"Add element"},{"Edit element"},{"Remove element"},{"Switch to user"}}};
+    system("cls");
+    switch((menu(chcs[*isadmin],cofchcs[*isadmin],true,0,2)+1)%cofchcs[*isadmin]){
+        case 1:if(*isadmin==false){if((*isadmin = signin("Insert password:"))==true){printf("\n  Login successfull\n  ");system("pause");};}else{changepasswd();}break;
+        case 2:printall(ops,n,"",0,4);printsummary(ops,n);system("pause");break;
+        case 3:opsearch(ops,n);break;
+        case 4:opsortmenu(ops,n);break;
+        case 5:if(adde(ops,n)==0)n++;break;
+        case 6:edite(ops,n);break;
+        case 7:rme(ops,n);break;
+        case 0:if(*isadmin==false)return 1;*isadmin=false;break;
+        default:break;
+    }
+    return 0;
+}
+
+int init(Op ops[],int *n, const char *out){
+    system("cls");
+    FILE * io = fopen(out,"r");
+    FILE * passwd = fopen("passwd.txt","r");
+    if(io==NULL||passwd==NULL)return -1;
+    fclose(passwd);
+    reade(io,ops,n);
+    fclose(io);
+    return 0;
 }
 
 int main(){
     int n=MAX_OPERATOR_COUNT;
     Op ops[n];
-    char out[]="opsout.txt";
-    /*TEMNO*/
-    DWORD mode = 0;
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    GetConsoleMode(hConsole, &mode);
-    mode |= ENABLE_PROCESSED_INPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    SetConsoleMode(hConsole, mode);
-    /*SVITANI*/
-    FILE * io = fopen(out,"a+");
-    FILE * passwd = fopen("passwd.txt","a");
-    if(io==NULL||passwd==NULL)return -1;
-    fclose(passwd);
-    int choice;
-    n=reade(io,ops,n);
     bool admin=true;
-    while(true){
-        choice = mainMenu(admin);
-        switch(choice){
-            case 1:if(admin==false){if((admin = signin("Insert password:"))==true){spacing();printf("Login successfull");spacing();system("pause");};}else{changepasswd();}break;
-            case 2:printall(ops,n,"",0,4);system("pause");break;
-            case 3:opsearch(ops,n);break;
-            case 4:opsortmenu(ops,n);break;
-            case 5:if(adde(ops,n)==0)n++;break;
-            case 6:edite(ops,n);break;
-            case 7:rme(ops,n);break;
-            case 0:if(admin==false){fclose(io);commit(out,ops,n);return 0;}admin=false;break;
-            default:break;
-        }
+    char out[]="opsout.txt";
+    if(init(ops,&n,out)!=0){
+        printf("Failed to read files");
+        return -1;
+    }
+    
+    while(mainMenu(ops,n,&admin)==0){
         commit(out,ops,n);
     }
+    return 0;
 }
